@@ -1,6 +1,6 @@
 require 'test_helper'
 
-class ConfirmationTest < ActionDispatch::IntegrationTest
+class ConfirmationTest < Devise::IntegrationTest
 
   def visit_user_confirmation_with_token(confirmation_token)
     visit user_confirmation_path(confirmation_token: confirmation_token)
@@ -35,18 +35,18 @@ class ConfirmationTest < ActionDispatch::IntegrationTest
   test 'user with invalid confirmation token should not be able to confirm an account' do
     visit_user_confirmation_with_token('invalid_confirmation')
     assert_have_selector '#error_explanation'
-    assert_contain /Confirmation token(.*)invalid/
+    assert_contain %r{Confirmation token(.*)invalid}
   end
 
   test 'user with valid confirmation token should not be able to confirm an account after the token has expired' do
     swap Devise, confirm_within: 3.days do
       user = create_user(confirm: false, confirmation_sent_at: 4.days.ago)
-      assert_not user.confirmed?
+      refute user.confirmed?
       visit_user_confirmation_with_token(user.raw_confirmation_token)
 
       assert_have_selector '#error_explanation'
-      assert_contain /needs to be confirmed within 3 days/
-      assert_not user.reload.confirmed?
+      assert_contain %r{needs to be confirmed within 3 days}
+      refute user.reload.confirmed?
       assert_current_url "/users/confirmation?confirmation_token=#{user.raw_confirmation_token}"
     end
   end
@@ -84,7 +84,7 @@ class ConfirmationTest < ActionDispatch::IntegrationTest
   test 'user with valid confirmation token should be able to confirm an account before the token has expired' do
     swap Devise, confirm_within: 3.days do
       user = create_user(confirm: false, confirmation_sent_at: 2.days.ago)
-      assert_not user.confirmed?
+      refute user.confirmed?
       visit_user_confirmation_with_token(user.raw_confirmation_token)
 
       assert_contain 'Your email address has been successfully confirmed.'
@@ -130,7 +130,7 @@ class ConfirmationTest < ActionDispatch::IntegrationTest
       sign_in_as_user(confirm: false)
 
       assert_contain 'You have to confirm your email address before continuing'
-      assert_not warden.authenticated?(:user)
+      refute warden.authenticated?(:user)
     end
   end
 
@@ -140,8 +140,8 @@ class ConfirmationTest < ActionDispatch::IntegrationTest
         fill_in 'password', with: 'invalid'
       end
 
-      assert_contain 'Invalid email or password'
-      assert_not warden.authenticated?(:user)
+      assert_contain 'Invalid Email or password'
+      refute warden.authenticated?(:user)
     end
   end
 
@@ -184,14 +184,14 @@ class ConfirmationTest < ActionDispatch::IntegrationTest
 
   test 'resent confirmation token with valid E-Mail in XML format should return valid response' do
     user = create_user(confirm: false)
-    post user_confirmation_path(format: 'xml'), user: { email: user.email }
+    post user_confirmation_path(format: 'xml'), params: { user: { email: user.email } }
     assert_response :success
     assert_equal response.body, {}.to_xml
   end
 
   test 'resent confirmation token with invalid E-Mail in XML format should return invalid response' do
     create_user(confirm: false)
-    post user_confirmation_path(format: 'xml'), user: { email: 'invalid.test@test.com' }
+    post user_confirmation_path(format: 'xml'), params: { user: { email: 'invalid.test@test.com' } }
     assert_response :unprocessable_entity
     assert response.body.include? %(<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<errors>)
   end
@@ -213,7 +213,7 @@ class ConfirmationTest < ActionDispatch::IntegrationTest
   test 'request an account confirmation account with JSON, should return an empty JSON' do
     user = create_user(confirm: false)
 
-    post user_confirmation_path, user: { email: user.email }, format: :json
+    post user_confirmation_path, params: { user: { email: user.email }, format: :json }
     assert_response :success
     assert_equal response.body, {}.to_json
   end
@@ -249,7 +249,7 @@ class ConfirmationTest < ActionDispatch::IntegrationTest
   end
 end
 
-class ConfirmationOnChangeTest < ActionDispatch::IntegrationTest
+class ConfirmationOnChangeTest < Devise::IntegrationTest
   def create_second_admin(options={})
     @admin = nil
     create_admin(options)
@@ -284,7 +284,7 @@ class ConfirmationOnChangeTest < ActionDispatch::IntegrationTest
     assert_contain 'Your email address has been successfully confirmed.'
     assert_current_url '/admin_area/sign_in'
     assert admin.reload.confirmed?
-    assert_not admin.reload.pending_reconfirmation?
+    refute admin.reload.pending_reconfirmation?
   end
 
   test 'admin with previously valid confirmation token should not be able to confirm email after email changed again' do
@@ -306,7 +306,7 @@ class ConfirmationOnChangeTest < ActionDispatch::IntegrationTest
     assert_contain 'Your email address has been successfully confirmed.'
     assert_current_url '/admin_area/sign_in'
     assert admin.reload.confirmed?
-    assert_not admin.reload.pending_reconfirmation?
+    refute admin.reload.pending_reconfirmation?
   end
 
   test 'admin email should be unique also within unconfirmed_email' do

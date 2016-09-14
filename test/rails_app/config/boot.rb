@@ -3,12 +3,12 @@ unless defined?(DEVISE_ORM)
 end
 
 module Devise
-  # Detection for minor differences between Rails 3.2 and 4 in tests.
-  def self.rails4?
-    Rails.version.start_with? '4'
+  # Detection for minor differences between Rails 4 and 5 in tests.
+  def self.rails5?
+    Rails.version.start_with? '5'
   end
 end
 
 # Set up gems listed in the Gemfile.
 ENV['BUNDLE_GEMFILE'] ||= File.expand_path('../../../../Gemfile', __FILE__)
-require 'bundler/setup' if File.exists?(ENV['BUNDLE_GEMFILE'])
+require 'bundler/setup' if File.exist?(ENV['BUNDLE_GEMFILE'])

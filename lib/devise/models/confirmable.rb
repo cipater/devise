@@ -24,7 +24,7 @@ module Devise
     #     By default allow_unconfirmed_access_for is zero, it means users always have to confirm to sign in.
     #   * +reconfirmable+: requires any email changes to be confirmed (exactly the same way as
     #     initial account confirmation) to be applied. Requires additional unconfirmed_email
-    #     db field to be setup (t.reconfirmable in migrations). Until confirmed, new email is
+    #     db field to be set up (t.reconfirmable in migrations). Until confirmed, new email is
     #     stored in unconfirmed email column, and copied to email column on successful
     #     confirmation.
     #   * +confirm_within+: the time before a sent confirmation token becomes invalid.
@@ -40,17 +40,23 @@ module Devise
     #
     module Confirmable
       extend ActiveSupport::Concern
-      include ActionView::Helpers::DateHelper
 
       included do
         before_create :generate_confirmation_token, if: :confirmation_required?
-        after_create  :send_on_create_confirmation_instructions, if: :send_confirmation_notification?
+        after_create :skip_reconfirmation_in_callback!, if: :send_confirmation_notification?
+        if respond_to?(:after_commit) # ActiveRecord
+          after_commit :send_on_create_confirmation_instructions, on: :create, if: :send_confirmation_notification?
+          after_commit :send_reconfirmation_instructions, on: :update, if: :reconfirmation_required?
+        else # Mongoid
+          after_create :send_on_create_confirmation_instructions, if: :send_confirmation_notification?
+          after_update :send_reconfirmation_instructions, if: :reconfirmation_required?
+        end
         before_update :postpone_email_change_until_confirmation_and_regenerate_confirmation_token, if: :postpone_email_change?
-        after_update  :send_reconfirmation_instructions,  if: :reconfirmation_required?
       end
 
       def initialize(*args, &block)
         @bypass_confirmation_postpone = false
+        @skip_reconfirmation_in_callback = false
         @reconfirmation_required = false
         @skip_confirmation_notification = false
         @raw_confirmation_token = nil
@@ -76,7 +82,7 @@ module Devise
 
           self.confirmed_at = Time.now.utc
 
-          saved = if self.class.reconfirmable && unconfirmed_email.present?
+          saved = if pending_reconfirmation?
             skip_reconfirmation!
             self.email = unconfirmed_email
             self.unconfirmed_email = nil
@@ -90,11 +96,6 @@ module Devise
           after_confirmation if saved
           saved
         end
-      end
-
-      def confirm!(args={})
-        ActiveSupport::Deprecation.warn "confirm! is deprecated in favor of confirm"
-        confirm(args)
       end
 
       # Verifies whether a user is confirmed or not
@@ -165,6 +166,12 @@ module Devise
 
       protected
 
+        # To not require reconfirmation after creating with #save called in a
+        # callback call skip_create_confirmation!
+        def skip_reconfirmation_in_callback!
+          @skip_reconfirmation_in_callback = true
+        end
+
         # A callback method used to deliver confirmation
         # instructions on creation. This can be overridden
         # in models to map to a nice sign up e-mail.
@@ -180,7 +187,7 @@ module Devise
         # Checks if the confirmation for the user is within the limit time.
         # We do this by calculating if the difference between today and the
         # confirmation sent date does not exceed the confirm in time configured.
-        # Confirm_within is a model configuration, must always be an integer value.
+        # allow_unconfirmed_access_for is a model configuration, must always be an integer value.
         #
         # Example:
         #
@@ -216,7 +223,7 @@ module Devise
         #   confirmation_period_expired?  # will always return false
         #
         def confirmation_period_expired?
-          self.class.confirm_within && (Time.now > self.confirmation_sent_at + self.class.confirm_within)
+          self.class.confirm_within && self.confirmation_sent_at && (Time.now > self.confirmation_sent_at + self.class.confirm_within)
         end
 
         # Checks whether the record requires any confirmation.
@@ -235,8 +242,7 @@ module Devise
           if self.confirmation_token && !confirmation_period_expired?
             @raw_confirmation_token = self.confirmation_token
           else
-            raw, _ = Devise.token_generator.generate(self.class, :confirmation_token)
-            self.confirmation_token = @raw_confirmation_token = raw
+            self.confirmation_token = @raw_confirmation_token = Devise.friendly_token
             self.confirmation_sent_at = Time.now.utc
           end
         end
@@ -254,13 +260,17 @@ module Devise
         end
 
         def postpone_email_change?
-          postpone = self.class.reconfirmable && email_changed? && !@bypass_confirmation_postpone && self.email.present?
+          postpone = self.class.reconfirmable &&
+            email_changed? &&
+            !@bypass_confirmation_postpone &&
+            self.email.present? &&
+            (!@skip_reconfirmation_in_callback || !self.email_was.nil?)
           @bypass_confirmation_postpone = false
           postpone
         end
 
         def reconfirmation_required?
-          self.class.reconfirmable && @reconfirmation_required && self.email.present?
+          self.class.reconfirmable && @reconfirmation_required && (self.email.present? || self.unconfirmed_email.present?)
         end
 
         def send_confirmation_notification?
@@ -315,6 +325,7 @@ module Devise
 
         # Find a record for confirmation by unconfirmed email field
         def find_by_unconfirmed_email_with_errors(attributes = {})
+          attributes = attributes.slice(*confirmation_keys).permit!.to_h if attributes.respond_to? :permit
           unconfirmed_required_attributes = confirmation_keys.map { |k| k == :email ? :unconfirmed_email : k }
           unconfirmed_attributes = attributes.symbolize_keys
           unconfirmed_attributes[:unconfirmed_email] = unconfirmed_attributes.delete(:email)

@@ -2,11 +2,10 @@ require "action_controller/metal"
 
 module Devise
   # Failure application that will be called every time :warden is thrown from
-  # any strategy or hook. Responsible for redirect the user to the sign in
-  # page based on current scope and mapping. If no scope is given, redirect
-  # to the default_url.
+  # any strategy or hook. It is responsible for redirecting the user to the sign
+  # in page based on current scope and mapping. If no scope is given, it
+  # redirects to the default_url.
   class FailureApp < ActionController::Metal
-    include ActionController::RackDelegation
     include ActionController::UrlFor
     include ActionController::Redirecting
 
@@ -51,9 +50,27 @@ module Devise
     end
 
     def recall
-      env["PATH_INFO"]  = attempted_path
+      header_info = if relative_url_root?
+        base_path = Pathname.new(relative_url_root)
+        full_path = Pathname.new(attempted_path)
+
+        { "SCRIPT_NAME" => relative_url_root,
+          "PATH_INFO" => '/' + full_path.relative_path_from(base_path).to_s }
+      else
+        { "PATH_INFO" => attempted_path }
+      end
+
+      header_info.each do | var, value|
+        if request.respond_to?(:set_header)
+          request.set_header(var, value)
+        else
+          request.env[var]  = value
+        end
+      end
+
       flash.now[:alert] = i18n_message(:invalid) if is_flashing_format?
-      self.response = recall_app(warden_options[:recall]).call(env)
+      # self.response = recall_app(warden_options[:recall]).call(env)
+      self.response = recall_app(warden_options[:recall]).call(request.env)
     end
 
     def redirect
@@ -84,7 +101,7 @@ module Devise
         options[:scope] = "devise.failure"
         options[:default] = [message]
         auth_keys = scope_class.authentication_keys
-        keys = auth_keys.respond_to?(:keys) ? auth_keys.keys : auth_keys
+        keys = (auth_keys.respond_to?(:keys) ? auth_keys.keys : auth_keys).map { |key| scope_class.human_attribute_name(key) }
         options[:authentication_keys] = keys.join(I18n.translate(:"support.array.words_connector"))
         options = i18n_options(options)
 
@@ -116,10 +133,14 @@ module Devise
 
     def scope_url
       opts  = {}
-      route = route(scope)
-      opts[:format] = request_format unless skip_format?
 
-      config = Rails.application.config
+      # Initialize script_name with nil to prevent infinite loops in
+      # authenticated mounted engines in rails 4.2 and 5.0
+      opts[:script_name] = nil
+
+      route = route(scope)
+
+      opts[:format] = request_format unless skip_format?
 
       router_name = Devise.mappings[scope].router_name || Devise.available_router_name
       context = send(router_name)
@@ -138,7 +159,7 @@ module Devise
       elsif respond_to?(:root_url)
         root_url(opts)
       else
-        "/"
+        '/'
       end
     end
 
@@ -146,12 +167,12 @@ module Devise
       %w(html */*).include? request_format.to_s
     end
 
-    # Choose whether we should respond in a http authentication fashion,
+    # Choose whether we should respond in an HTTP authentication fashion,
     # including 401 and optional headers.
     #
-    # This method allows the user to explicitly disable http authentication
-    # on ajax requests in case they want to redirect on failures instead of
-    # handling the errors on their own. This is useful in case your ajax API
+    # This method allows the user to explicitly disable HTTP authentication
+    # on AJAX requests in case they want to redirect on failures instead of
+    # handling the errors on their own. This is useful in case your AJAX API
     # is the same as your public API and uses a format like JSON (so you
     # cannot mark JSON as a navigational format).
     def http_auth?
@@ -162,7 +183,7 @@ module Devise
       end
     end
 
-    # It does not make sense to send authenticate headers in ajax requests
+    # It doesn't make sense to send authenticate headers in AJAX requests
     # or if the user disabled them.
     def http_auth_header?
       scope_class.http_authenticatable && !request.xhr?
@@ -188,11 +209,11 @@ module Devise
     end
 
     def warden
-      env['warden']
+      request.respond_to?(:get_header) ? request.get_header("warden") : request.env["warden"]
     end
 
     def warden_options
-      env['warden.options']
+      request.respond_to?(:get_header) ? request.get_header("warden.options") : request.env["warden.options"]
     end
 
     def warden_message
@@ -211,10 +232,10 @@ module Devise
       warden_options[:attempted_path]
     end
 
-    # Stores requested uri to redirect the user after signing in. We cannot use
-    # scoped session provided by warden here, since the user is not authenticated
-    # yet, but we still need to store the uri based on scope, so different scopes
-    # would never use the same uri to redirect.
+    # Stores requested URI to redirect the user after signing in. We can't use
+    # the scoped session provided by warden here, since the user is not
+    # authenticated yet, but we still need to store the URI based on scope, so
+    # different scopes would never use the same URI to redirect.
     def store_location!
       store_location_for(scope, attempted_path) if request.get? && !http_auth?
     end
@@ -231,6 +252,18 @@ module Devise
 
     def request_format
       @request_format ||= request.format.try(:ref)
+    end
+
+    def relative_url_root
+      @relative_url_root ||= begin
+        config = Rails.application.config
+
+        config.try(:relative_url_root) || config.action_controller.try(:relative_url_root)
+      end
+    end
+
+    def relative_url_root?
+      relative_url_root.present?
     end
   end
 end

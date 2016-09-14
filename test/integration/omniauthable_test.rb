@@ -1,7 +1,7 @@
 require 'test_helper'
 
 
-class OmniauthableIntegrationTest < ActionDispatch::IntegrationTest
+class OmniauthableIntegrationTest < Devise::IntegrationTest
   FACEBOOK_INFO = {
     "id" => '12345',
     "link" => 'http://facebook.com/josevalim',
@@ -71,7 +71,7 @@ class OmniauthableIntegrationTest < ActionDispatch::IntegrationTest
     assert_current_url "/"
     assert_contain "You have signed up successfully."
     assert_contain "Hello User user@example.com"
-    assert_not session["devise.facebook_data"]
+    refute session["devise.facebook_data"]
   end
 
   test "cleans up session on cancel" do

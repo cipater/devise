@@ -29,7 +29,7 @@ class ValidatableTest < ActiveSupport::TestCase
     assert user.invalid?
     assert_not_equal 'is invalid', user.errors[:email].join
 
-    %w{invalid_email_format 123 $$$ () ☃ bla@bla.}.each do |email|
+    %w{invalid_email_format 123 $$$ () ☃}.each do |email|
       user.email = email
       assert user.invalid?, 'should be invalid with email ' << email
       assert_equal 'is invalid', user.errors[:email].join
@@ -57,11 +57,7 @@ class ValidatableTest < ActiveSupport::TestCase
     user = new_user(password: 'new_password', password_confirmation: 'blabla')
     assert user.invalid?
 
-    if Devise.rails4?
-      assert_equal 'doesn\'t match Password', user.errors[:password_confirmation].join
-    else
-      assert_equal 'doesn\'t match confirmation', user.errors[:password].join
-    end
+    assert_equal 'doesn\'t match Password', user.errors[:password_confirmation].join
   end
 
   test 'should require password when updating/resetting password' do
@@ -79,11 +75,7 @@ class ValidatableTest < ActiveSupport::TestCase
     user.password_confirmation = 'another_password'
     assert user.invalid?
 
-    if Devise.rails4?
-      assert_equal 'doesn\'t match Password', user.errors[:password_confirmation].join
-    else
-      assert_equal 'doesn\'t match confirmation', user.errors[:password].join
-    end
+    assert_equal 'doesn\'t match Password', user.errors[:password_confirmation].join
   end
 
   test 'should require a password with minimum of 7 characters' do
@@ -105,7 +97,7 @@ class ValidatableTest < ActiveSupport::TestCase
 
     user.password_confirmation = 'confirmation'
     assert user.invalid?
-    assert_not (user.errors[:password].join =~ /is too long/)
+    refute (user.errors[:password].join =~ /is too long/)
   end
 
   test 'should complain about length even if password is not required' do

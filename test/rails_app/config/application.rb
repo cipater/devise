@@ -28,9 +28,13 @@ module RailsApp
 
     # Configure sensitive parameters which will be filtered from the log file.
     config.filter_parameters << :password
-    config.assets.enabled = false
+    # config.assets.enabled = false
 
     config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
+
+    if DEVISE_ORM == :active_record && (Rails::VERSION::MAJOR >= 4 && Rails::VERSION::MINOR >= 2)
+      config.active_record.raise_in_transactional_callbacks = true
+    end
 
     # This was used to break devise in some situations
     config.to_prepare do

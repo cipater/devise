@@ -7,7 +7,7 @@ module Devise
     # blocked: email and time. The former will send an email to the user when
     # the lock happens, containing a link to unlock its account. The second
     # will unlock the user automatically after some configured time (ie 2.hours).
-    # It's also possible to setup lockable to use both email and time strategies.
+    # It's also possible to set up lockable to use both email and time strategies.
     #
     # == Options
     #
@@ -64,7 +64,7 @@ module Devise
       def send_unlock_instructions
         raw, enc = Devise.token_generator.generate(self.class, :unlock_token)
         self.unlock_token = enc
-        self.save(validate: false)
+        save(validate: false)
         send_devise_notification(:unlock_instructions, raw, {})
         raw
       end
@@ -155,6 +155,9 @@ module Devise
         end
 
       module ClassMethods
+        # List of strategies that are enabled/supported if :both is used.
+        BOTH_STRATEGIES = [:time, :email]
+
         # Attempt to find a user by its unlock keys. If a record is found, send new
         # unlock instructions to it. If not user is found, returns a new user
         # with an email not found error.
@@ -181,7 +184,8 @@ module Devise
 
         # Is the unlock enabled for the given unlock strategy?
         def unlock_strategy_enabled?(strategy)
-          [:both, strategy].include?(self.unlock_strategy)
+          self.unlock_strategy == strategy ||
+            (self.unlock_strategy == :both && BOTH_STRATEGIES.include?(strategy))
         end
 
         # Is the lock enabled for the given lock strategy?

@@ -1,8 +1,8 @@
 require 'test_helper'
 
-class TestHelpersTest < ActionController::TestCase
+class TestControllerHelpersTest < Devise::ControllerTestCase
   tests UsersController
-  include Devise::TestHelpers
+  include Devise::Test::ControllerHelpers
 
   test "redirects if attempting to access a page unauthenticated" do
     get :index
@@ -27,7 +27,7 @@ class TestHelpersTest < ActionController::TestCase
       assert !user.active_for_authentication?
 
       sign_in user
-      get :accept, id: user
+      get :accept, params: { id: user }
       assert_nil assigns(:current_user)
     end
   end
@@ -68,13 +68,13 @@ class TestHelpersTest < ActionController::TestCase
   test "respects custom failure app" do
     custom_failure_app = Class.new(Devise::FailureApp) do
       def redirect
-        self.status = 306
+        self.status = 300
       end
     end
 
     swap Devise.warden_config, failure_app: custom_failure_app do
       get :index
-      assert_response 306
+      assert_response 300
     end
   end
 
@@ -163,7 +163,7 @@ class TestHelpersTest < ActionController::TestCase
 
   test "creates a new warden proxy if the request object has changed" do
     old_warden_proxy = warden
-    @request = ActionController::TestRequest.new
+    @request = Devise.rails5? ? ActionController::TestRequest.create : ActionController::TestRequest.new
     new_warden_proxy = warden
 
     assert_not_equal old_warden_proxy, new_warden_proxy

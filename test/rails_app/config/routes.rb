@@ -28,6 +28,11 @@ Rails.application.routes.draw do
     router_name: :fake_engine,
     module: :devise
 
+  devise_for :user_without_email,
+    class_name: 'UserWithoutEmail',
+    router_name: :main_app,
+    module: :devise
+
   as :user do
     get "/as/sign_in", to: "devise/sessions#new"
   end
@@ -109,6 +114,7 @@ Rails.application.routes.draw do
   namespace :sign_out_via, module: "devise" do
     devise_for :deletes, sign_out_via: :delete, class_name: "Admin"
     devise_for :posts, sign_out_via: :post, class_name: "Admin"
+    devise_for :gets, sign_out_via: :get, class_name: "Admin"
     devise_for :delete_or_posts, sign_out_via: [:delete, :post], class_name: "Admin"
   end
 

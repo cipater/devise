@@ -2,13 +2,17 @@
 class DeviseController < Devise.parent_controller.constantize
   include Devise::Controllers::ScopedViews
 
-  helper DeviseHelper
+  if respond_to?(:helper)
+    helper DeviseHelper
+  end
 
-  helpers = %w(resource scope_name resource_name signed_in_resource
-               resource_class resource_params devise_mapping)
-  helper_method(*helpers)
+  if respond_to?(:helper_method)
+    helpers = %w(resource scope_name resource_name signed_in_resource
+                 resource_class resource_params devise_mapping)
+    helper_method(*helpers)
+  end
 
-  prepend_before_filter :assert_is_devise_resource!
+  prepend_before_action :assert_is_devise_resource!
   respond_to :html if mimes_for_respond_to.empty?
 
   # Override prefixes to consider the scoped view.
@@ -89,10 +93,10 @@ MESSAGE
     instance_variable_set(:"@#{resource_name}", new_resource)
   end
 
-  # Helper for use in before_filters where no authentication is required.
+  # Helper for use in before_actions where no authentication is required.
   #
   # Example:
-  #   before_filter :require_no_authentication, only: :new
+  #   before_action :require_no_authentication, only: :new
   def require_no_authentication
     assert_is_devise_resource!
     return unless is_navigational_format?
@@ -123,13 +127,13 @@ MESSAGE
     end
 
     if notice
-      set_flash_message :notice, notice if is_flashing_format?
+      set_flash_message! :notice, notice
       true
     end
   end
 
   # Sets the flash message with :key, using I18n. By default you are able
-  # to setup your messages using specific resource scope, and if no message is
+  # to set up your messages using specific resource scope, and if no message is
   # found we look to the default scope. Set the "now" options key to a true
   # value to populate the flash.now hash in lieu of the default flash hash (so
   # the flash message will be available to the current action instead of the
@@ -151,6 +155,13 @@ MESSAGE
       flash.now[key] = message if message.present?
     else
       flash[key] = message if message.present?
+    end
+  end
+
+  # Sets flash message if is_flashing_format? equals true
+  def set_flash_message!(key, kind, options = {})
+    if is_flashing_format?
+      set_flash_message(key, kind, options)
     end
   end
 

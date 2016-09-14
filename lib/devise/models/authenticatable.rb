@@ -114,6 +114,15 @@ module Devise
         super(options)
       end
 
+      # Redefine inspect using serializable_hash, to ensure we don't accidentally
+      # leak passwords into exceptions.
+      def inspect
+        inspection = serializable_hash.collect do |k,v|
+          "#{k}: #{respond_to?(:attribute_for_inspect) ? attribute_for_inspect(k) : v.inspect}"
+        end
+        "#<#{self.class} #{inspection.join(", ")}>"
+      end
+
       protected
 
       def devise_mailer
@@ -143,13 +152,25 @@ module Devise
       #         if new_record? || changed?
       #           pending_notifications << [notification, args]
       #         else
-      #           devise_mailer.send(notification, self, *args).deliver
+      #           message = devise_mailer.send(notification, self, *args)
+      #           Remove once we move to Rails 4.2+ only.
+      #           if message.respond_to?(:deliver_now)
+      #             message.deliver_now
+      #           else
+      #             message.deliver
+      #           end
       #         end
       #       end
       #
       #       def send_pending_notifications
       #         pending_notifications.each do |notification, args|
-      #           devise_mailer.send(notification, self, *args).deliver
+      #           message = devise_mailer.send(notification, self, *args)
+      #           Remove once we move to Rails 4.2+ only.
+      #           if message.respond_to?(:deliver_now)
+      #             message.deliver_now
+      #           else
+      #             message.deliver
+      #           end
       #         end
       #
       #         # Empty the pending notifications array because the
@@ -253,7 +274,11 @@ module Devise
 
         # Find or initialize a record with group of attributes based on a list of required attributes.
         def find_or_initialize_with_errors(required_attributes, attributes, error=:invalid) #:nodoc:
-          attributes = attributes.slice(*required_attributes).with_indifferent_access
+          attributes = if attributes.respond_to? :permit!
+            attributes.slice(*required_attributes).permit!.to_h.with_indifferent_access
+          else
+            attributes.with_indifferent_access.slice(*required_attributes)
+          end
           attributes.delete_if { |key, value| value.blank? }
 
           if attributes.size == required_attributes.size

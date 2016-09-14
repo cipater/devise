@@ -1,7 +1,7 @@
 require 'test_helper'
 require 'ostruct'
 
-class ControllerAuthenticatableTest < ActionController::TestCase
+class ControllerAuthenticatableTest < Devise::ControllerTestCase
   tests ApplicationController
 
   def setup
@@ -96,7 +96,7 @@ class ControllerAuthenticatableTest < ActionController::TestCase
 
   test 'proxy admin_signed_in? to authenticatewith admin scope' do
     @mock_warden.expects(:authenticate).with(scope: :admin)
-    assert_not @controller.admin_signed_in?
+    refute @controller.admin_signed_in?
   end
 
   test 'proxy publisher_account_signed_in? to authenticate with namespaced publisher account scope' do
@@ -150,11 +150,11 @@ class ControllerAuthenticatableTest < ActionController::TestCase
     @controller.sign_in(user, force: true)
   end
 
-  test 'sign in accepts bypass as option' do
+  test 'bypass the sign in' do
     user = User.new
     @mock_warden.expects(:session_serializer).returns(serializer = mock())
     serializer.expects(:store).with(user, :user)
-    @controller.sign_in(user, bypass: true)
+    @controller.bypass_sign_in(user)
   end
 
   test 'sign out clears up any signed in user from all scopes' do
@@ -311,6 +311,6 @@ class ControllerAuthenticatableTest < ActionController::TestCase
   end
 
   test 'is not a devise controller' do
-    assert_not @controller.devise_controller?
+    refute @controller.devise_controller?
   end
 end

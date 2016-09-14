@@ -11,7 +11,9 @@ module Devise
     end
 
     # Force routes to be loaded if we are doing any eager load.
-    config.before_eager_load { |app| app.reload_routes! }
+    config.before_eager_load do |app|
+      app.reload_routes! if Devise.reload_routes
+    end
 
     initializer "devise.url_helpers" do
       Devise.include_helpers(Devise::Controllers)
@@ -39,18 +41,9 @@ module Devise
       Devise.token_generator ||=
         if secret_key = Devise.secret_key
           Devise::TokenGenerator.new(
-            Devise::CachingKeyGenerator.new(Devise::KeyGenerator.new(secret_key))
+            ActiveSupport::CachingKeyGenerator.new(ActiveSupport::KeyGenerator.new(secret_key))
           )
         end
-    end
-
-    initializer "devise.fix_routes_proxy_missing_respond_to_bug" do
-      # Deprecate: Remove once we move to Rails 4 only.
-      ActionDispatch::Routing::RoutesProxy.class_eval do
-        def respond_to?(method, include_private = false)
-          super || routes.url_helpers.respond_to?(method)
-        end
-      end
     end
   end
 end

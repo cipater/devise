@@ -1,7 +1,7 @@
 class Devise::PasswordsController < DeviseController
-  prepend_before_filter :require_no_authentication
+  prepend_before_action :require_no_authentication
   # Render the #edit only if coming from a reset password email link
-  append_before_filter :assert_reset_token_passed, only: :edit
+  append_before_action :assert_reset_token_passed, only: :edit
 
   # GET /resource/password/new
   def new
@@ -36,13 +36,14 @@ class Devise::PasswordsController < DeviseController
       resource.unlock_access! if unlockable?(resource)
       if Devise.sign_in_after_reset_password
         flash_message = resource.active_for_authentication? ? :updated : :updated_not_active
-        set_flash_message(:notice, flash_message) if is_flashing_format?
+        set_flash_message!(:notice, flash_message)
         sign_in(resource_name, resource)
       else
-        set_flash_message(:notice, :updated_not_active) if is_flashing_format?
+        set_flash_message!(:notice, :updated_not_active)
       end
       respond_with resource, location: after_resetting_password_path_for(resource)
     else
+      set_minimum_password_length
       respond_with resource
     end
   end

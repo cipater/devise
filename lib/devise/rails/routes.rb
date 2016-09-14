@@ -1,13 +1,10 @@
 require "active_support/core_ext/object/try"
 require "active_support/core_ext/hash/slice"
 
-module ActionDispatch::Routing
-  class RouteSet #:nodoc:
-    # Ensure Devise modules are included only after loading routes, because we
-    # need devise_for mappings already declared to create filters and helpers.
-    def finalize_with_devise!
-      result = finalize_without_devise!
-
+module Devise
+  module RouteSet
+    def finalize!
+      result = super
       @devise_finalized ||= begin
         if Devise.router_name.nil? && defined?(@devise_finalized) && self != Rails.application.try(:routes)
           warn "[DEVISE] We have detected that you are using devise_for inside engine routes. " \
@@ -21,10 +18,16 @@ module ActionDispatch::Routing
         Devise.regenerate_helpers!
         true
       end
-
       result
     end
-    alias_method_chain :finalize!, :devise
+  end
+end
+
+module ActionDispatch::Routing
+  class RouteSet #:nodoc:
+    # Ensure Devise modules are included only after loading routes, because we
+    # need devise_for mappings already declared to create filters and helpers.
+    prepend Devise::RouteSet
   end
 
   class Mapper
@@ -84,17 +87,17 @@ module ActionDispatch::Routing
     #
     # You can configure your routes with some options:
     #
-    #  * class_name: setup a different class to be looked up by devise, if it cannot be
+    #  * class_name: set up a different class to be looked up by devise, if it cannot be
     #    properly found by the route name.
     #
     #      devise_for :users, class_name: 'Account'
     #
-    #  * path: allows you to setup path name that will be used, as rails routes does.
-    #    The following route configuration would setup your route as /accounts instead of /users:
+    #  * path: allows you to set up path name that will be used, as rails routes does.
+    #    The following route configuration would set up your route as /accounts instead of /users:
     #
     #      devise_for :users, path: 'accounts'
     #
-    #  * singular: setup the singular name for the given resource. This is used as the helper methods
+    #  * singular: set up the singular name for the given resource. This is used as the helper methods
     #    names in controller ("authenticate_#{singular}!", "#{singular}_signed_in?", "current_#{singular}"
     #    and "#{singular}_session"), as the scope name in routes and as the scope given to warden.
     #
@@ -105,7 +108,7 @@ module ActionDispatch::Routing
     #      end
     #
     #      class ManagerController < ApplicationController
-    #        before_filter authenticate_manager!
+    #        before_action authenticate_manager!
     #
     #        def show
     #          @manager = current_manager
@@ -335,7 +338,7 @@ module ActionDispatch::Routing
 
     # Sets the devise scope to be used in the controller. If you have custom routes,
     # you are required to call this method (also aliased as :as) in order to specify
-    # to which controller it is targetted.
+    # to which controller it is targeted.
     #
     #   as :user do
     #     get "sign_in", to: "devise/sessions#new"
@@ -428,27 +431,29 @@ options to another `devise_for` call outside the scope. Here is an example:
     end
 ERROR
         end
-
-        path, @scope[:path] = @scope[:path], nil
+        current_scope = @scope.dup
+        if @scope.respond_to? :new
+          @scope = @scope.new path: nil
+        else
+          @scope[:path] = nil
+        end
         path_prefix = Devise.omniauth_path_prefix || "/#{mapping.fullpath}/auth".squeeze("/")
 
         set_omniauth_path_prefix!(path_prefix)
 
-        providers = Regexp.union(mapping.to.omniauth_providers.map(&:to_s))
+        mapping.to.omniauth_providers.each do |provider|
+          match "#{path_prefix}/#{provider}",
+            to: "#{controllers[:omniauth_callbacks]}#passthru",
+            as: "#{provider}_omniauth_authorize",
+            via: [:get, :post]
 
-        match "#{path_prefix}/:provider",
-          constraints: { provider: providers },
-          to: "#{controllers[:omniauth_callbacks]}#passthru",
-          as: :omniauth_authorize,
-          via: [:get, :post]
-
-        match "#{path_prefix}/:action/callback",
-          constraints: { action: providers },
-          to: "#{controllers[:omniauth_callbacks]}#:action",
-          as: :omniauth_callback,
-          via: [:get, :post]
+          match "#{path_prefix}/#{provider}/callback",
+            to: "#{controllers[:omniauth_callbacks]}##{provider}",
+            as: "#{provider}_omniauth_callback",
+            via: [:get, :post]
+        end
       ensure
-        @scope[:path] = path
+        @scope = current_scope
       end
 
       def with_devise_exclusive_scope(new_path, new_as, options) #:nodoc:
@@ -457,7 +462,11 @@ ERROR
         exclusive = { as: new_as, path: new_path, module: nil }
         exclusive.merge!(options.slice(:constraints, :defaults, :options))
 
-        exclusive.each_pair { |key, value| @scope[key] = value }
+        if @scope.respond_to? :new
+          @scope = @scope.new exclusive
+        else
+          exclusive.each_pair { |key, value| @scope[key] = value }
+        end
         yield
       ensure
         @scope = current_scope

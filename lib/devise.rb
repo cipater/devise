@@ -12,19 +12,18 @@ module Devise
   autoload :FailureApp,         'devise/failure_app'
   autoload :OmniAuth,           'devise/omniauth'
   autoload :ParameterFilter,    'devise/parameter_filter'
-  autoload :BaseSanitizer,      'devise/parameter_sanitizer'
   autoload :ParameterSanitizer, 'devise/parameter_sanitizer'
   autoload :TestHelpers,        'devise/test_helpers'
   autoload :TimeInflector,      'devise/time_inflector'
   autoload :TokenGenerator,     'devise/token_generator'
 
   module Controllers
-    autoload :Helpers, 'devise/controllers/helpers'
-    autoload :Rememberable, 'devise/controllers/rememberable'
-    autoload :ScopedViews, 'devise/controllers/scoped_views'
-    autoload :SignInOut, 'devise/controllers/sign_in_out'
-    autoload :StoreLocation, 'devise/controllers/store_location'
-    autoload :UrlHelpers, 'devise/controllers/url_helpers'
+    autoload :Helpers,        'devise/controllers/helpers'
+    autoload :Rememberable,   'devise/controllers/rememberable'
+    autoload :ScopedViews,    'devise/controllers/scoped_views'
+    autoload :SignInOut,      'devise/controllers/sign_in_out'
+    autoload :StoreLocation,  'devise/controllers/store_location'
+    autoload :UrlHelpers,     'devise/controllers/url_helpers'
   end
 
   module Hooks
@@ -36,17 +35,22 @@ module Devise
   end
 
   module Strategies
-    autoload :Base, 'devise/strategies/base'
+    autoload :Base,            'devise/strategies/base'
     autoload :Authenticatable, 'devise/strategies/authenticatable'
+  end
+
+  module Test
+    autoload :ControllerHelpers,  'devise/test/controller_helpers'
+    autoload :IntegrationHelpers, 'devise/test/integration_helpers'
   end
 
   # Constants which holds devise configuration for extensions. Those should
   # not be modified by the "end user" (this is why they are constants).
   ALL         = []
-  CONTROLLERS = ActiveSupport::OrderedHash.new
-  ROUTES      = ActiveSupport::OrderedHash.new
-  STRATEGIES  = ActiveSupport::OrderedHash.new
-  URL_HELPERS = ActiveSupport::OrderedHash.new
+  CONTROLLERS = {}
+  ROUTES      = {}
+  STRATEGIES  = {}
+  URL_HELPERS = {}
 
   # Strategies that do not require user input.
   NO_INPUT = []
@@ -62,9 +66,9 @@ module Devise
   mattr_accessor :rememberable_options
   @@rememberable_options = {}
 
-  # The number of times to encrypt password.
+  # The number of times to hash the password.
   mattr_accessor :stretches
-  @@stretches = 10
+  @@stretches = 11
 
   # The default key used when authenticating over http auth.
   mattr_accessor :http_authentication_key
@@ -84,7 +88,7 @@ module Devise
 
   # Keys that should have whitespace stripped.
   mattr_accessor :strip_whitespace_keys
-  @@strip_whitespace_keys = []
+  @@strip_whitespace_keys = [:email]
 
   # If http authentication is enabled by default.
   mattr_accessor :http_authenticatable
@@ -102,11 +106,11 @@ module Devise
   mattr_accessor :http_authentication_realm
   @@http_authentication_realm = "Application"
 
-  # Email regex used to validate email formats. It simply asserts that
-  # an one (and only one) @ exists in the given string. This is mainly
-  # to give user feedback and not to assert the e-mail validity.
+  # Email regex used to validate email formats. It asserts that there are no
+  # @ symbols or whitespaces in either the localpart or the domain, and that
+  # there is a single @ symbol separating the localpart and the domain.
   mattr_accessor :email_regexp
-  @@email_regexp = /\A[^@\s]+@([^@\s]+\.)+[^@\W]+\z/
+  @@email_regexp = /\A[^@\s]+@[^@\s]+\z/
 
   # Range validation for password length
   mattr_accessor :password_length
@@ -138,15 +142,14 @@ module Devise
   @@confirmation_keys = [:email]
 
   # Defines if email should be reconfirmable.
-  # False by default for backwards compatibility.
   mattr_accessor :reconfirmable
-  @@reconfirmable = false
+  @@reconfirmable = true
 
   # Time interval to timeout the user session without activity.
   mattr_accessor :timeout_in
   @@timeout_in = 30.minutes
 
-  # Used to encrypt password. Please generate one with rake secret.
+  # Used to hash the password. Please generate one with rake secret.
   mattr_accessor :pepper
   @@pepper = nil
 
@@ -203,7 +206,7 @@ module Devise
 
   # Skip session storage for the following strategies
   mattr_accessor :skip_session_storage
-  @@skip_session_storage = []
+  @@skip_session_storage = [:http_auth]
 
   # Which formats should be treated as navigational.
   mattr_accessor :navigational_formats
@@ -215,7 +218,7 @@ module Devise
 
   # The default method used while signing out
   mattr_accessor :sign_out_via
-  @@sign_out_via = :get
+  @@sign_out_via = :delete
 
   # The parent controller all Devise controllers inherits from.
   # Defaults to ApplicationController. This should be set early
@@ -244,15 +247,22 @@ module Devise
   mattr_accessor :clean_up_csrf_token_on_authentication
   @@clean_up_csrf_token_on_authentication = true
 
+  # When false, Devise will not attempt to reload routes on eager load.
+  # This can reduce the time taken to boot the app but if your application
+  # requires the Devise mappings to be loaded during boot time the application
+  # won't boot properly.
+  mattr_accessor :reload_routes
+  @@reload_routes = true
+
   # PRIVATE CONFIGURATION
 
   # Store scopes mappings.
   mattr_reader :mappings
-  @@mappings = ActiveSupport::OrderedHash.new
+  @@mappings = {}
 
   # OmniAuth configurations.
   mattr_reader :omniauth_configs
-  @@omniauth_configs = ActiveSupport::OrderedHash.new
+  @@omniauth_configs = {}
 
   # Define a set of modules that are called when a mapping is added.
   mattr_reader :helpers
@@ -276,14 +286,14 @@ module Devise
   mattr_accessor :token_generator
   @@token_generator = nil
 
-  # Default way to setup Devise. Run rails generate devise_install to create
+  # Default way to set up Devise. Run rails generate devise_install to create
   # a fresh initializer with all configuration values.
   def self.setup
     yield self
   end
 
   class Getter
-    def initialize name
+    def initialize(name)
       @name = name
     end
 
@@ -293,12 +303,8 @@ module Devise
   end
 
   def self.ref(arg)
-    if defined?(ActiveSupport::Dependencies::ClassCache)
-      ActiveSupport::Dependencies::reference(arg)
-      Getter.new(arg)
-    else
-      ActiveSupport::Dependencies.ref(arg)
-    end
+    ActiveSupport::Dependencies.reference(arg)
+    Getter.new(arg)
   end
 
   def self.available_router_name
@@ -419,7 +425,6 @@ module Devise
   #   config.omniauth :github, APP_ID, APP_SECRET
   #
   def self.omniauth(provider, *args)
-    @@helpers << Devise::OmniAuth::UrlHelpers
     config = Devise::OmniAuth::Config.new(provider, args)
     @@omniauth_configs[config.strategy_name.to_sym] = config
   end
@@ -457,10 +462,7 @@ module Devise
           mapping.to.serialize_into_session(record)
         end
 
-        warden_config.serialize_from_session(mapping.name) do |key|
-          # Previous versions contained an additional entry at the beginning of
-          # key with the record's class name.
-          args = key[-2, 2]
+        warden_config.serialize_from_session(mapping.name) do |args|
           mapping.to.serialize_from_session(*args)
         end
       end
