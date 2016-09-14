@@ -4,7 +4,7 @@ require 'ostruct'
 class FailureTest < ActiveSupport::TestCase
   class RootFailureApp < Devise::FailureApp
     def fake_app
-      Object.new
+      Struct.new(:routes).new(nil)
     end
   end
 
@@ -30,6 +30,9 @@ class FailureTest < ActiveSupport::TestCase
     class FakeEngine
       def new_user_on_engine_session_url _
         '/user_on_engines/sign_in'
+      end
+
+      def routes
       end
     end
 
